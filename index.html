@@ -677,9 +677,8 @@
         const [showFilterModal, setShowFilterModal] = useState(false);
         const [showCurrencyModal, setShowCurrencyModal] = useState(false);
         const [editingExpense, setEditingExpense] = useState(null);
-        const [priceFilter, setPriceFilter] = useState([0, 100000]);
+        const [priceFilter, setPriceFilter] = useState([0, Number.MAX_SAFE_INTEGER]); 
         const [dateRange, setDateRange] = useState([null, null]);
-
         // Filter list based on Search, Price, and generic Date Range filter
         const filteredExpenses = expenses.filter(e => {
             const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1041,9 +1040,24 @@
     // ============================================================================
     // FILTER MODAL
     // ============================================================================
+        // ============================================================================
+    // FILTER MODAL (UPDATED)
+    // ============================================================================
     const FilterModal = ({ priceFilter, dateRange, onApply, onClose, currency }) => {
-        const [price, setPrice] = useState(priceFilter);
+        // Use 100000 as the visual "max" for the slider, but logic handles Infinity
+        const SLIDER_MAX = 100000;
+        
+        const [price, setPrice] = useState([
+            priceFilter[0], 
+            priceFilter[1] >= Number.MAX_SAFE_INTEGER ? SLIDER_MAX : priceFilter[1]
+        ]);
         const [dates, setDates] = useState(dateRange);
+
+        const handleApply = () => {
+            // If slider is at max, set actual limit to Infinity
+            const finalMax = price[1] >= SLIDER_MAX ? Number.MAX_SAFE_INTEGER : price[1];
+            onApply([price[0], finalMax], dates);
+        };
 
         return (
             <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4" onClick={onClose}>
@@ -1053,7 +1067,10 @@
                 >
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Filter Results</h3>
-                        <button onClick={() => { setPrice([0, 100000]); setDates([null, null]); }} className="text-red-500 font-semibold">
+                        <button 
+                            onClick={() => { setPrice([0, SLIDER_MAX]); setDates([null, null]); }} 
+                            className="text-red-500 font-semibold"
+                        >
                             Reset
                         </button>
                     </div>
@@ -1080,23 +1097,28 @@
                         <div>
                             <div className="flex justify-between mb-2">
                                 <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Price Range</label>
-                                <span className="text-sm text-gray-900 dark:text-white">
-                                        {CURRENCIES[currency]}{price[0]} - {CURRENCIES[currency]}{price[1]}
-                                    </span>
+                                <span className="text-sm text-gray-900 dark:text-white font-mono">
+                                    {CURRENCIES[currency]}{price[0]} - {price[1] >= SLIDER_MAX ? 'Unlimited' : CURRENCIES[currency] + price[1]}
+                                </span>
                             </div>
                             <input
                                 type="range"
                                 min="0"
-                                max="100000"
+                                max={SLIDER_MAX}
+                                step="100"
                                 value={price[1]}
                                 onChange={(e) => setPrice([price[0], parseInt(e.target.value)])}
                                 className="w-full"
                             />
+                            <div className="flex justify-between text-xs text-gray-400 mt-1">
+                                <span>0</span>
+                                <span>100k+</span>
+                            </div>
                         </div>
                     </div>
 
                     <button
-                        onClick={() => onApply(price, dates)}
+                        onClick={handleApply}
                         className="w-full mt-6 bg-gradient-to-r from-cyan-400 to-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg"
                     >
                         Apply Filters
@@ -1105,6 +1127,7 @@
             </div>
         );
     };
+
 
     // ============================================================================
     // CURRENCY MODAL

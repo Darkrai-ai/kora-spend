@@ -199,8 +199,7 @@
         if (hour < 17) return 'Good Afternoon';
         return 'Good Evening';
     };
-    // --- NEW ICON COMPONENT ---
-    // --- UPDATED ICON COMPONENT (Includes all UI icons) ---
+    // --- UPDATED ICON COMPONENT (Added 'calendar' icon) ---
     const Icon = ({ name, size = 24, color = "currentColor", className = "" }) => {
         const icons = {
             // Categories
@@ -221,7 +220,8 @@
             arrowLeft: <path d="M19 12H5 M12 19l-7-7 7-7" />,
             chevronDown: <path d="M6 9l6 6 6-6" />,
             user: <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />,
-            file: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" />
+            file: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" />,
+            calendar: <path d="M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z M16 2v4 M8 2v4 M3 10h18" />
         };
 
         return (
@@ -309,7 +309,7 @@
         useEffect(() => {
             const init = async () => {
                 await initFirebase();
-                
+
 
                 if (!USE_FIREBASE || !auth) {
                     const localProfile = LocalService.getProfile();
@@ -670,7 +670,9 @@
     const DashboardScreen = () => {
         const { profile, expenses, isGuest, addOrUpdateExpense, deleteExpense, convertCurrency, setCurrentScreen } = useContext(AppContext);
         const [searchQuery, setSearchQuery] = useState('');
-        const [view, setView] = useState('month');
+        const [view, setView] = useState('month'); // 'month', 'today', 'total'
+        const [selectedDate, setSelectedDate] = useState(new Date()); // Controls the date shown in blue box
+
         const [showAddModal, setShowAddModal] = useState(false);
         const [showFilterModal, setShowFilterModal] = useState(false);
         const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -678,6 +680,7 @@
         const [priceFilter, setPriceFilter] = useState([0, 100000]);
         const [dateRange, setDateRange] = useState([null, null]);
 
+        // Filter list based on Search, Price, and generic Date Range filter
         const filteredExpenses = expenses.filter(e => {
             const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 e.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -693,6 +696,7 @@
             return matchesSearch && matchesPrice && matchesDate;
         });
 
+        // Group expenses for the list view below the card
         const groupedExpenses = filteredExpenses.reduce((acc, exp) => {
             const dateKey = formatDate(exp.date);
             if (!acc[dateKey]) acc[dateKey] = [];
@@ -700,23 +704,45 @@
             return acc;
         }, {});
 
+        // Calculate total based on VIEW + SELECTED DATE
         const calculateTotal = () => {
-            const now = new Date();
             if (view === 'total') return filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-            if (view === 'month') {
-                return filteredExpenses.filter(e => {
-                    const d = new Date(e.date);
-                    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                }).reduce((sum, e) => sum + e.amount, 0);
-            }
+
             return filteredExpenses.filter(e => {
                 const d = new Date(e.date);
-                return d.toDateString() === now.toDateString();
+
+                if (view === 'month') {
+                    // Compare Month and Year
+                    return d.getMonth() === selectedDate.getMonth() &&
+                        d.getFullYear() === selectedDate.getFullYear();
+                }
+
+                if (view === 'today') {
+                    // Compare exact Date
+                    return d.toDateString() === selectedDate.toDateString();
+                }
+
+                return false;
             }).reduce((sum, e) => sum + e.amount, 0);
         };
 
         const currencySymbol = CURRENCIES[profile.currency];
         const total = calculateTotal();
+
+        // Helper to format the label shown at top left of blue card
+        const getDateLabel = () => {
+            if (view === 'total') return 'Total Spent';
+
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            if (view === 'month') {
+                return `${months[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
+            }
+            if (view === 'today') {
+                // Check if it's actually today to say "Today", otherwise show date
+                if(selectedDate.toDateString() === new Date().toDateString()) return 'Today';
+                return selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            }
+        };
 
         return (
             <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-24">
@@ -742,17 +768,21 @@
                         </button>
                     </div>
 
-                    {/* Spending Card */}
+                    {/* Spending Card (Blue Box) */}
                     <div className="bg-gradient-to-br from-cyan-400 to-blue-600 rounded-3xl p-6 shadow-2xl">
                         <div className="flex justify-between items-center mb-4">
-                            <p className="text-white/80 text-sm">
-                                {view === 'total' ? 'Total Spent' : view === 'month' ? 'This Month' : 'Today'}
+                            <p className="text-white/80 text-sm font-semibold tracking-wide">
+                                {getDateLabel()}
                             </p>
                             <div className="flex gap-1 bg-black/20 rounded-full p-1">
                                 {['month', 'today', 'total'].map(v => (
                                     <button
                                         key={v}
-                                        onClick={() => setView(v)}
+                                        onClick={() => {
+                                            setView(v);
+                                            // Reset date to today when switching views for better UX
+                                            if(v !== view) setSelectedDate(new Date());
+                                        }}
                                         className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                                             view === v ? 'bg-white/20 text-white' : 'text-white/60'
                                         }`}
@@ -762,14 +792,42 @@
                                 ))}
                             </div>
                         </div>
+
                         <div className="flex justify-between items-end">
                             <h3 className="text-4xl font-bold text-white">{currencySymbol}{total.toFixed(2)}</h3>
-                            <button
-                                onClick={() => setShowCurrencyModal(true)}
-                                className="bg-white/20 border border-white/30 px-3 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1 hover:bg-white/30 transition-colors"
-                            >
-                                {profile.currency.toUpperCase()} <Icon name="chevronDown" size={16} />
-                            </button>
+
+                            <div className="flex gap-2">
+                                {/* DATE SELECTOR BUTTON (Only shows if not in 'All' view) */}
+                                {view !== 'total' && (
+                                    <div className="relative bg-white/20 border border-white/30 rounded-xl hover:bg-white/30 transition-colors">
+                                        {/* Invisible Input Layer */}
+                                        <input
+                                            type={view === 'month' ? 'month' : 'date'}
+                                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                                            onChange={(e) => {
+                                                if(e.target.value) {
+                                                    // input type="month" returns "2023-10", date returns "2023-10-25"
+                                                    // We append '-01' for month type to make it parseable
+                                                    const val = view === 'month' ? e.target.value + '-01' : e.target.value;
+                                                    setSelectedDate(new Date(val));
+                                                }
+                                            }}
+                                        />
+                                        {/* Visible Button Layer */}
+                                        <button className="px-3 py-2 text-white h-full flex items-center justify-center">
+                                            <Icon name="calendar" size={16} />
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* CURRENCY BUTTON */}
+                                <button
+                                    onClick={() => setShowCurrencyModal(true)}
+                                    className="bg-white/20 border border-white/30 px-3 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1 hover:bg-white/30 transition-colors"
+                                >
+                                    {profile.currency.toUpperCase()} <Icon name="chevronDown" size={16} />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

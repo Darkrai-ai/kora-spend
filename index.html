@@ -101,21 +101,21 @@
 <body>
 <div id="root"></div>
 <script type="module">
-    // 1. Import Firebase modules from the CDN
+    // 1. Import Firebase modules (Added Redirect functions)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+    import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
         from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, query, orderBy, onSnapshot, deleteDoc, writeBatch, getDocs }
         from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-    // 2. Make them available globally so your React app can see them
+    // 2. Make them available globally
     window.firebaseModules = {
         initializeApp,
-        getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged,
+        getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged,
         getFirestore, doc, setDoc, getDoc, collection, query, orderBy, onSnapshot, deleteDoc, writeBatch, getDocs
     };
 
-    console.log("Firebase modules loaded successfully");
+    console.log("Firebase modules loaded (with Redirect support)");
 </script>
 <script type="text/babel">
     const { useState, useEffect, createContext, useContext } = React;
@@ -310,6 +310,20 @@
             const init = async () => {
                 await initFirebase();
 
+                // --- NEW CODE START: Handle Redirect Return ---
+                if (auth) {
+                    const { getRedirectResult } = window.firebaseModules;
+                    try {
+                        const result = await getRedirectResult(auth);
+                        if (result && result.user) {
+                            console.log("Returned from login redirect:", result.user);
+                            // Optional: Check for local data merge here if needed
+                        }
+                    } catch (error) {
+                        console.error("Redirect login error:", error);
+                    }
+                }
+
                 if (!USE_FIREBASE || !auth) {
                     const localProfile = LocalService.getProfile();
                     if (localProfile) {
@@ -388,27 +402,21 @@
 
         const loginWithGoogle = async () => {
             if (!USE_FIREBASE || !auth) {
-                alert("Firebase not configured. Using guest mode instead.");
+                alert("Firebase not configured. Using guest mode.");
                 loginAsGuest();
                 return;
             }
 
             try {
-                const { signInWithPopup, GoogleAuthProvider } = window.firebaseModules;
+                // CHANGED: Use Redirect instead of Popup for Mobile App support
+                const { signInWithRedirect, GoogleAuthProvider } = window.firebaseModules;
                 const provider = new GoogleAuthProvider();
-                const result = await signInWithPopup(auth, provider);
-
-                if (LocalService.hasData()) {
-                    if (window.confirm("Merge local expenses with your Google account?")) {
-                        await mergeData(result.user);
-                    } else {
-                        LocalService.clearAll();
-                        await loadCloudData(result.user);
-                    }
-                }
+                await signInWithRedirect(auth, provider);
+                // Note: The page will now reload and go to Google.
+                // We handle the return in useEffect below.
             } catch (e) {
                 console.error("Login error:", e);
-                alert("Login failed. Check console for details.");
+                alert("Login failed: " + e.message);
             }
         };
 

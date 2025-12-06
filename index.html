@@ -309,20 +309,7 @@
         useEffect(() => {
             const init = async () => {
                 await initFirebase();
-
-                // --- NEW CODE START: Handle Redirect Return ---
-                if (auth) {
-                    const { getRedirectResult } = window.firebaseModules;
-                    try {
-                        const result = await getRedirectResult(auth);
-                        if (result && result.user) {
-                            console.log("Returned from login redirect:", result.user);
-                            // Optional: Check for local data merge here if needed
-                        }
-                    } catch (error) {
-                        console.error("Redirect login error:", error);
-                    }
-                }
+                
 
                 if (!USE_FIREBASE || !auth) {
                     const localProfile = LocalService.getProfile();
@@ -408,12 +395,15 @@
             }
 
             try {
-                // CHANGED: Use Redirect instead of Popup for Mobile App support
-                const { signInWithRedirect, GoogleAuthProvider } = window.firebaseModules;
+                // REVERTED: Use Popup (Works best on iOS now that Domain is fixed)
+                const { signInWithPopup, GoogleAuthProvider } = window.firebaseModules;
                 const provider = new GoogleAuthProvider();
-                await signInWithRedirect(auth, provider);
-                // Note: The page will now reload and go to Google.
-                // We handle the return in useEffect below.
+
+                // This will open a Safari modal overlay
+                await signInWithPopup(auth, provider);
+
+                // No need to handle redirect result anymore,
+                // the code below will just run automatically after popup closes
             } catch (e) {
                 console.error("Login error:", e);
                 alert("Login failed: " + e.message);
